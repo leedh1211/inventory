@@ -1,0 +1,139 @@
+create or replace table equipment_instance
+(
+    item_uid   char(36)                             not null
+        primary key,
+    item_seq   int                                  not null,
+    created_at datetime default current_timestamp() null
+);
+
+create or replace table equipment_slot_type
+(
+    seq         int auto_increment
+        primary key,
+    name        varchar(50)  null,
+    description varchar(100) null,
+    constraint seq
+        unique (seq)
+);
+
+create or replace table equipment_total_stat
+(
+    item_uid    char(36) not null,
+    stat_id     int      not null,
+    total_value float    not null,
+    primary key (item_uid, stat_id)
+);
+
+create or replace table equipment_upgrade_history
+(
+    id            int auto_increment
+        primary key,
+    item_uid      char(36)                             not null,
+    upgrade_level int                                  not null,
+    stat_type     varchar(50)                          not null,
+    stat_value    float                                not null,
+    upgraded_at   datetime default current_timestamp() null
+);
+
+create or replace table item_category
+(
+    seq           int auto_increment,
+    category_text varchar(100) not null,
+    is_uid        tinyint(1)   not null,
+    constraint seq
+        unique (seq)
+);
+
+create or replace table item_effect
+(
+    id           int auto_increment
+        primary key,
+    item_seq     int         not null,
+    effect_type  varchar(50) not null,
+    effect_value float       not null,
+    duration     int         null
+);
+
+create or replace table item_master
+(
+    seq          int auto_increment
+        primary key,
+    category     tinyint              not null,
+    display_name varchar(100)         not null,
+    description  text                 null,
+    is_stackable tinyint(1) default 1 not null,
+    period int default -1 not null
+);
+
+create or replace table monster_drop_table
+(
+    monster_id int   not null,
+    item_seq   int   not null,
+    drop_rate  float null,
+    primary key (monster_id, item_seq)
+);
+
+create or replace table stat_category
+(
+    seq  int auto_increment
+        primary key,
+    name varchar(10) null
+);
+
+create or replace table user
+(
+    seq         int auto_increment
+        primary key,
+    id          varchar(100)  not null,
+    password    varchar(100)  not null,
+    name        varchar(100)  not null,
+    email       varchar(100)  null,
+    gold        int default 0 not null,
+    level       int default 1 not null,
+    current_exp int default 0 null,
+    class       int default 0 not null,
+    constraint email
+        unique (email),
+    constraint id
+        unique (id),
+    constraint seq
+        unique (seq)
+);
+
+create or replace table user_equipment
+(
+    seq         int auto_increment
+        primary key,
+    user_seq    int                                  not null,
+    slot_type   varchar(50)                          not null,
+    item_uid    char(36)                             not null,
+    equipped_at datetime default current_timestamp() null,
+    constraint seq
+        unique (seq)
+);
+
+create or replace table user_inventory
+(
+    user_seq      int                                    not null,
+    slot_index    int                                    not null,
+    item_uid      char(36)                               null,
+    item_seq      int                                    null,
+    quantity      int        default 1                   null,
+    acquired_at   datetime   default current_timestamp() null,
+    expired_at    datetime                               null,
+    is_quick_slot tinyint(1) default 0                   null,
+    primary key (user_seq, slot_index)
+);
+
+create or replace table user_stat
+(
+    seq      int auto_increment
+        primary key,
+    user_seq int not null,
+    value    int null,
+    stat_id  int null
+);
+
+create or replace index user_stat_user_seq_stat_id_index
+    on user_stat (user_seq, stat_id);
+
