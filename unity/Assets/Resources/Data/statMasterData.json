@@ -1,0 +1,27 @@
+[
+{
+    "id": 1,
+    "name": "체력",
+    "description": "플레이어의 생명력",
+    "icon": "hp"
+},
+{
+    "id": 2,
+    "name": "마나",
+    "description": "마법 사용에 필요한 자원",
+    "icon": "mp"
+},
+{
+    "id": 3,
+    "name": "공격력",
+    "description": "공격 시 데미지 수치",
+    "icon": "atk"
+},
+{
+    "id": 4,
+    "name": "스피드",
+    "description": "이동속도",
+    "icon": "speed"
+}
+  
+]

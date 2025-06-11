@@ -1,0 +1,26 @@
+[
+  {
+    "seq": 1,
+    "display_name": "검",
+    "description": "기본적인 검입니다.",
+    "icon": "sword_icon"
+  },
+  {
+    "seq": 2,
+    "display_name": "갑옷",
+    "description": "기본적인 갑옷입니다.",
+    "icon": "armor_icon"
+  },
+  {
+    "seq": 3,
+    "display_name": "HP포션",
+    "description": "HP를 50회복시켜주는 포션입니다",
+    "icon": "hp_potion_icon"
+  },
+  {
+    "seq": 4,
+    "display_name": "MP포션",
+    "description": "MP를 50회복시켜주는 포션입니다",
+    "icon": "mp_potion_icon"
+  }
+]

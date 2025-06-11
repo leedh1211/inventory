@@ -1,0 +1,949 @@
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Class
+{
+    public enum ClassEnum
+    {
+        Beginner = 0,
+        Warrior = 1,
+        Archer = 2,
+        Mage = 3,
+        Thief = 4
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System;
+using System.Collections.Generic;
+
+public static class EventBus
+{
+    private static readonly Dictionary<Type, Delegate> eventDict = new();
+
+    public static void Subscribe<T>(Action<T> handler)
+    {
+        if (eventDict.TryGetValue(typeof(T), out var existingHandler))
+        {
+            eventDict[typeof(T)] = Delegate.Combine(existingHandler, handler);
+        }
+        else
+        {
+            eventDict[typeof(T)] = handler;
+        }
+    }
+
+    public static void Unsubscribe<T>(Action<T> handler)
+    {
+        if (eventDict.TryGetValue(typeof(T), out var existingHandler))
+        {
+            var newHandler = Delegate.Remove(existingHandler, handler);
+            if (newHandler == null) eventDict.Remove(typeof(T));
+            else eventDict[typeof(T)] = newHandler;
+        }
+    }
+
+    public static void Raise<T>(T eventData)
+    {
+        if (eventDict.TryGetValue(typeof(T), out var handler))
+        {
+            ((Action<T>)handler)?.Invoke(eventData);
+        }
+    }
+
+    public static void ClearAll() => eventDict.Clear(); // ?듭뀡
+}
+ 
+===== ?�일: %~dpnxF ===== 
+public struct OnLogin {}
+ 
+===== ?�일: %~dpnxF ===== 
+using System;
+
+namespace _02_Scripts.Item
+{
+    public class ItemData
+    {
+        public int user_seq;
+        public int slot_index;
+        public string item_uid;
+        public string item_name;
+        public string item_description;
+        public string item_icon;
+        public int item_seq;
+        public int quantity;
+        public DateTime? acquired_at;
+        public DateTime? expired_at;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Item
+{
+    [System.Serializable]
+    public class ItemMasterData
+    {
+        public int seq;
+        public string display_name;
+        public string description;
+        public string icon;    
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+
+namespace _02_Scripts.Item
+{
+    [System.Serializable]
+    public class ItemMasterDataList
+    {
+        public List<ItemMasterData> items;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+using _02_Scripts.Item;
+using Newtonsoft.Json;
+using UnityEngine;
+
+public class ItemMasterLoader : MonoBehaviour
+{
+    public static Dictionary<int, ItemMasterData> itemMasterDict = new();
+
+    void Awake()
+    {
+        LoadItemMaster();
+    }
+
+    private void LoadItemMaster()
+    {
+        TextAsset jsonText = Resources.Load<TextAsset>("Data/itemMasterData");
+        if (jsonText == null)
+        {
+            Debug.LogError("itemMasterData.json ?뚯씪??李얠쓣 ???놁뒿?덈떎.");
+            return;
+        }
+
+        List<ItemMasterData> items = JsonConvert.DeserializeObject<List<ItemMasterData>>(jsonText.text);
+        foreach (var item in items)
+        {
+            itemMasterDict[item.seq] = item;
+        }
+    }
+
+}
+ 
+===== ?�일: %~dpnxF ===== 
+public class LoginData
+{
+    public string userId;
+    public string password;
+
+    public LoginData(string id, string pw)
+    {
+        userId = id;
+        password = pw;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+    using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using _02_Scripts.Player;
+using Newtonsoft.Json;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
+
+public class LoginManager : MonoBehaviour
+{
+    [SerializeField] private TMP_InputField idInputField;
+    [SerializeField] private TMP_InputField pwInputField;
+    
+    private string loginUrl = "http://localhost:3000/api/login/onLogin";
+    
+    public void OnLoginButtonPressed()
+    {
+        string userId = idInputField.text;
+        string password = pwInputField.text;
+
+        Debug.Log($"濡쒓렇???쒕룄: ID={userId}, PW={password}");
+        StartCoroutine(SendLoginRequest(userId, password));
+    }
+    
+    private IEnumerator SendLoginRequest(string userId, string password)
+    {
+        string HashPass = ConvertHash.StringToHash(password);
+        // JSON ?뺤떇?쇰줈 ?꾩넚???곗씠???앹꽦
+        string jsonData = JsonConvert.SerializeObject(new LoginData(userId, HashPass));
+
+        // ?붿껌 媛앹껜 ?앹꽦
+        UnityWebRequest request = new UnityWebRequest(loginUrl, "POST");
+        byte[] jsonToSend = new UTF8Encoding().GetBytes(jsonData);
+        request.uploadHandler = new UploadHandlerRaw(jsonToSend);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+
+        // ?붿껌 ?꾩넚
+        yield return request.SendWebRequest();
+
+        // ?묐떟 泥섎━
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            LoginResponse response = JsonConvert.DeserializeObject<LoginResponse>(request.downloadHandler.text);
+            PlayerData loginData = response.data;
+            login(loginData);
+        }
+        else
+        {
+            Debug.LogError("?쒕쾭 ?붿껌 ?ㅽ뙣: " + request.error);
+        }
+    }
+
+    private void login(PlayerData loginData)
+    {
+        Debug.Log(loginData.seq);
+        // PlayerManager ?앹꽦
+        GameObject obj = new GameObject("PlayerManager");
+        PlayerManager manager = obj.AddComponent<PlayerManager>();
+        manager.Init(loginData);
+
+        // ???대룞
+        SceneManager.LoadScene("MainScene");
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using _02_Scripts.Player;
+
+public class LoginResponse
+{
+    public string message { get; set; }
+    public PlayerData data { get; set; }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using UnityEngine;
+
+namespace _02_Scripts.Login
+{
+    public class LoginUIManager : MonoBehaviour
+    {
+        [SerializeField] private GameObject LoginPopup;
+
+        public void Start()
+        {
+            LoginPopup.SetActive(false);
+        }
+
+        public void ShowLoginPopup()
+        {
+            LoginPopup.SetActive(true);
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections;
+using System.Text;
+using _02_Scripts.Player;
+using Newtonsoft.Json;
+using UnityEngine;
+using UnityEngine.Networking;
+
+namespace _02_Scripts.Monster.Drop
+{
+    public class Drop
+    {
+        private string dropUrl = "http://localhost:3000/api/drop/drop"; 
+        
+        private IEnumerator SendDropRequest(int monsterId, int userId, float dropRate)
+        {
+            string jsonData = JsonConvert.SerializeObject(new DropData(monsterId, userId, dropRate));
+
+            UnityWebRequest request = new UnityWebRequest(dropUrl, "POST");
+            byte[] jsonToSend = new UTF8Encoding().GetBytes(jsonData);
+            request.uploadHandler = new UploadHandlerRaw(jsonToSend);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+            }
+            else
+            {
+                Debug.LogError("?쒕쾭 ?붿껌 ?ㅽ뙣: " + request.error);
+            }
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Monster.Drop
+{
+    public class DropData
+    {
+        public int monsterId;
+        public int userSeq;
+        public float dropRateModifier;
+
+        public DropData(int monsterId, int userSeq, float dropRateModifier)
+        {
+            this.monsterId = monsterId;
+            this.userSeq = userSeq;
+            this.dropRateModifier = dropRateModifier;
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Player
+{
+    public class PlayerData
+    {
+        public string name;
+        public string id;
+        public int seq;
+        public int gold;
+        public int level;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections;
+using System.Text;
+using _02_Scripts.Player;
+using UnityEngine;
+using UnityEngine.Networking;
+
+public class PlayerManager : Singleton<PlayerManager>
+{
+    public PlayerData playerData;
+    public PlayerStatData playerStatData;
+    public void Init(PlayerData data)
+    {
+        playerData = data;
+        playerStatData = new PlayerStatData();
+        Debug.Log($"濡쒓렇?몃맂 ?좎?: {data.name}");
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+using _02_Scripts.Player.Status;
+
+[System.Serializable]
+public class PlayerStatData
+{
+    public int user_seq;
+    public List<StatData> stats;
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using _02_Scripts.Item;
+using _02_Scripts.Player.Inventory.Request;
+using UnityEngine;
+using UnityEngine.Networking;
+using Newtonsoft.Json;
+
+namespace _02_Scripts.Player.Inventory
+{
+    public class InventoryManager : MonoBehaviour
+    {
+        [SerializeField]
+        private InventoryUIManager inventoryUIManager;
+        
+        public List<ItemData> inventoryItems = new List<ItemData>();
+
+        public void Start()
+        {
+            StartCoroutine(GetInventory(PlayerManager.Instance.playerData.seq));
+        }
+
+        // private IEnumerator RunInventorySequence()
+        // { ?뚯뒪?몄슜 肄붾뱶
+        //     yield return StartCoroutine(AddInventory(1, 1));
+        //     yield return StartCoroutine(AddInventory(2, 1));
+        //     yield return StartCoroutine(AddInventory(3, 1));
+        //     yield return StartCoroutine(AddInventory(4, 1));
+        //     yield return StartCoroutine(AddInventory(1, 1));
+        //     yield return StartCoroutine(AddInventory(2, 1));
+        //     yield return StartCoroutine(AddInventory(3, 1));
+        //     yield return StartCoroutine(AddInventory(4, 1));
+        // }
+
+        public IEnumerator AddInventory(int itemSeq, int userSeq)
+        {
+            string url = "http://localhost:3000/api/inventory/Add";
+
+            InventoryRequest requestData = new InventoryRequest
+            {
+                itemSeq = itemSeq,
+                userSeq = userSeq
+            };
+
+            string jsonData = JsonConvert.SerializeObject(requestData);
+            
+            UnityWebRequest request = new UnityWebRequest(url, "POST");
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("異붽? ?깃났: " + request.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogError("?먮윭 諛쒖깮: " + request.error);
+            }
+        }
+
+        public IEnumerator GetInventory(int userSeq)
+        {
+            Debug.Log(userSeq);
+            string url = "http://localhost:3000/api/inventory/Get";
+
+            InventoryRequest requestData = new InventoryRequest
+            {
+                userSeq = userSeq
+            };
+
+            string jsonData = JsonUtility.ToJson(requestData);
+
+            UnityWebRequest request = new UnityWebRequest(url, "POST");
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string json = request.downloadHandler.text;
+                Debug.Log("?쒕쾭 ?묐떟: " + json);
+
+                ParsingInventory(JsonConvert.DeserializeObject<List<ItemData>>(json)); 
+                Debug.Log($"諛쏆? ?꾩씠??媛쒖닔: {inventoryItems.Count}");
+                inventoryUIManager.Init(inventoryItems);
+            }
+            else
+            {
+                Debug.LogError("?먮윭 諛쒖깮: " + request.error);
+            }
+        }
+
+        private void ParsingInventory(List<ItemData> itemList)
+        {
+            inventoryItems = new List<ItemData>();
+            foreach (var item in itemList)
+            {
+                item.item_description = ItemMasterLoader.itemMasterDict[item.item_seq].description;
+                item.item_icon = ItemMasterLoader.itemMasterDict[item.item_seq].icon;
+                item.item_name = ItemMasterLoader.itemMasterDict[item.item_seq].display_name;
+                inventoryItems.Add(item);
+            }
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using _02_Scripts.Item;
+using UnityEngine;
+
+namespace _02_Scripts.Player.Inventory
+{
+    public class InventorySlotManager : MonoBehaviour
+    {
+        private ItemData itemData;
+
+        public void SetItemData(ItemData itemData)
+        {
+            this.itemData = itemData;
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using _02_Scripts.Item;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using Utill;
+
+namespace _02_Scripts.Player.Inventory
+{
+    public class InventorySlotUIManager : MonoBehaviour
+    {
+        [SerializeField] 
+        private Image itemIcon;
+        [SerializeField] 
+        private TMP_Text amountText;
+
+        public void SetItem(ItemData itemData)
+        {
+            Sprite icon = Resources.Load<Sprite>($"Icon/{itemData.item_icon}");
+            itemIcon.sprite = icon;
+            amountText.text = itemData.quantity > 1 ? itemData.quantity.ToString() : "";
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+using _02_Scripts.Item;
+using UnityEditor;
+using UnityEngine;
+
+namespace _02_Scripts.Player.Inventory
+{
+    public class InventoryUIManager : MonoBehaviour
+    {
+        [SerializeField] private GameObject inventoryPanel;
+        [SerializeField] private GameObject content;
+        [SerializeField] private GameObject SlotManager;
+        [SerializeField] private GameObject inventoryItemPrefab;
+        private InventorySlotUIManager slotUI;
+        private InventorySlotManager slotManager;
+
+        public void Init(List<ItemData> items)
+        {
+            SetItemList(items);
+            inventoryPanel.SetActive(false);
+        }
+
+        public void SetItemList(List<ItemData> items)
+        {
+            foreach (ItemData item in items)
+            {
+                GameObject instance = Instantiate(inventoryItemPrefab, content.transform);
+                InventorySlotUIManager slotUI = instance.GetComponent<InventorySlotUIManager>();
+                InventorySlotManager slotManager = instance.GetComponent<InventorySlotManager>();
+                if (slotUI != null)
+                {
+                    slotUI.SetItem(item);
+                }
+
+                if (slotManager != null)
+                {
+                    slotManager.SetItemData(item);
+                }
+            }
+        }
+
+        public void ShowInventory()
+        {
+            inventoryPanel.SetActive(true);
+        }
+
+        public void HideInventory()
+        {
+            inventoryPanel.SetActive(false);
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Player.Inventory.Request
+{
+    [System.Serializable]
+    public class InventoryRequest
+    {
+        public int itemSeq;
+        public int userSeq;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Player.Status
+{
+    [System.Serializable]
+    public class StatData
+    {
+        public int stat_id;
+        public int stat_value;   // ?섏튂
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Player.Status
+{
+    [System.Serializable]
+    public class StatMasterData
+    {
+        public int id;
+        public string name;
+        public string description;
+        public string icon;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+using _02_Scripts.Player.Status;
+
+[System.Serializable]
+public class StatMasterDataList
+{
+    public List<StatMasterData> stats;
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections.Generic;
+using _02_Scripts.Player.Status;
+using Newtonsoft.Json;
+using UnityEngine;
+
+public class StatMasterLoader : MonoBehaviour
+{
+    public static Dictionary<int, StatMasterData> statMasterDict = new();
+
+    void Awake()
+    {
+        LoadStatMaster();
+    }
+
+    private void LoadStatMaster()
+    {
+        TextAsset jsonText = Resources.Load<TextAsset>("Data/statMasterData");
+        if (jsonText == null)
+        {
+            Debug.LogError("statMasterData.json ?뚯씪??李얠쓣 ???놁뒿?덈떎.");
+            return;
+        }
+
+        List<StatMasterData> stats = JsonConvert.DeserializeObject<List<StatMasterData>>(jsonText.text);
+        foreach (var stat in stats)
+        {
+            statMasterDict[stat.id] = stat;
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections;
+using System.Collections.Generic;
+using _02_Scripts.Item;
+using _02_Scripts.Player.Inventory.Request;
+using _02_Scripts.Player.Status.Request;
+using Newtonsoft.Json;
+using UnityEngine;
+using UnityEngine.Networking;
+
+namespace _02_Scripts.Player.Status
+{
+    public class StatusManager : MonoBehaviour
+    {
+        
+        [SerializeField]
+        private StatusUIManager statusUIManager;
+        public void Start()
+        {
+            StartCoroutine(GetStat(PlayerManager.Instance.playerData.seq));
+        }
+        
+        public IEnumerator GetStat(int userSeq)
+        {
+            Debug.Log(userSeq);
+            string url = "http://localhost:3000/api/status/Get";
+
+            StatusRequest requestData = new StatusRequest
+            {
+                userSeq = userSeq
+            };
+
+            string jsonData = JsonUtility.ToJson(requestData);
+
+            UnityWebRequest request = new UnityWebRequest(url, "POST");
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonData);
+
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string json = request.downloadHandler.text;
+                Debug.Log("?쒕쾭 ?묐떟: " + json);
+
+                PlayerManager.Instance.playerStatData = JsonConvert.DeserializeObject<PlayerStatData>(json);
+                statusUIManager.MakeStatusRow();
+            }
+            else
+            {
+                Debug.LogError("?먮윭 諛쒖깮: " + request.error);
+            }
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace _02_Scripts.Player.Status
+{
+    public class StatusSlotUIManager : MonoBehaviour
+    {
+        [SerializeField]
+        private Image Icon;
+
+        [SerializeField]
+        private TMP_Text StatName;
+
+        [SerializeField]
+        private TMP_Text StatValue;
+
+        public void SetSlot(StatData statData)
+        {
+            StatMasterLoader.statMasterDict.TryGetValue(statData.stat_id, out var master);
+            Sprite icon = Resources.Load<Sprite>($"Icon/{master.icon}");
+
+            Icon.sprite = icon;
+            StatName.text = master.name;
+            StatValue.text = statData.stat_value.ToString();
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using UnityEngine;
+
+namespace _02_Scripts.Player.Status
+{
+    public class StatusUIManager : MonoBehaviour
+    {
+        [SerializeField]
+        private GameObject statusPanel;
+        [SerializeField]
+        private GameObject statRowSlotPrefab;
+        [SerializeField]
+        private GameObject content;
+
+        public void MakeStatusRow()
+        {
+            PlayerStatData playerStatData = PlayerManager.Instance.playerStatData;
+            foreach (var stat in playerStatData.stats)
+            {
+                GameObject instance = Instantiate(statRowSlotPrefab, content.transform);
+                StatusSlotUIManager slotUI = instance.GetComponent<StatusSlotUIManager>();
+                slotUI.SetSlot(stat);
+            }
+        }
+
+        public void ShowStatusPanel()
+        {
+            statusPanel.SetActive(true);
+        }
+
+        public void HideStatusPanel()
+        {
+            statusPanel.SetActive(false);
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+namespace _02_Scripts.Player.Status.Request
+{
+    public class StatusRequest
+    {
+        public int userSeq;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using TMPro;
+using UnityEngine;
+using UnityEngine.PlayerLoop;
+using UnityEngine.UI;
+
+namespace _02_Scripts.UI
+{
+    public class CharacterUIManager
+    {
+        [SerializeField] private TMP_Text nameText;
+        [SerializeField] private TMP_Text levelText;
+        [SerializeField] private TMP_Text expFillText;
+        [SerializeField] private Slider expFillBar;
+
+        public void Start()
+        {
+            Init();
+        }
+        
+        public void Init()
+        {
+            nameText.text = PlayerManager.Instance.playerData.name;
+            levelText.text = PlayerManager.Instance.playerData.level.ToString();   
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using UnityEngine;
+
+namespace _02_Scripts.UI
+{
+    public class MainUIManager : MonoBehaviour
+    {
+        [SerializeField]
+        private GameObject BtnPanel;
+        
+        public void ShowBtn()
+        {
+            BtnPanel.SetActive(true);
+        }
+
+        public void HideBtn()
+        {
+            BtnPanel.SetActive(false);
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+
+using UnityEngine;
+
+namespace Utill
+{
+    public static class ComponentExtensions
+    {
+        /// TryGetComponent ??諛붾줈 蹂?섏뿉 ?좊떦?섎뒗 ?ы띁
+        public static bool AssignComponent<T>(this Component component, ref T target) where T : Component
+        {
+            if (component.TryGetComponent<T>(out var result))
+            {
+                target = result;
+                return true;
+            }
+            Debug.Log(target.name +"蹂?섑븷?뱀뿉 ?ㅽ뙣?섏??듬땲??");
+            return false;
+        }
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class InstantObject : MonoBehaviour
+{
+    //?쒖꽦?????뱀젙 ?쒓컙 ?댄썑, ?먮룞?쇰줈 鍮꾪솢?깊솕 ?섎뒗 ?ㅻ툕?앺듃
+
+    [SerializeField] private float duration;
+    private void OnEnable()
+    {
+        Invoke(nameof(Disable), duration);
+    }
+
+    private void Disable()
+    {
+        this.gameObject.SetActive(false);
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using UnityEngine;
+
+public abstract class Singleton<T> : MonoBehaviour where T : MonoBehaviour
+{
+    private static T instance;
+    private static object _lock = new object();
+    private static bool applicationIsQuitting = false;
+
+    public static T Instance
+    {
+        get
+        {
+            if (applicationIsQuitting)
+            {
+                Debug.LogWarning($"[Singleton] {typeof(T)} ?대? 醫낅즺?섏뿀?듬땲?? ???몄뒪?댁뒪??諛섑솚?섏? ?딆뒿?덈떎.");
+                return null;
+            }
+
+            lock (_lock)
+            {
+                if (instance == null)
+                {
+                    instance = FindObjectOfType<T>();
+
+                    if (FindObjectsOfType<T>().Length > 1)
+                    {
+                        Debug.LogError($"[Singleton] {typeof(T)} ?몄뒪?댁뒪媛 2媛??댁긽 議댁옱?⑸땲??");
+                        return instance;
+                    }
+
+                    if (instance == null)
+                    {
+                        GameObject singletonObject = new GameObject($"{typeof(T)} (Singleton)");
+                        instance = singletonObject.AddComponent<T>();
+                        DontDestroyOnLoad(singletonObject);
+                    }
+                }
+
+                return instance;
+            }
+        }
+    }
+
+    // ??以묐났 諛⑹?瑜??꾪븳 ?듭떖 濡쒖쭅
+    protected virtual void Awake()
+    {
+        if (instance == null)
+        {
+            instance = this as T;
+            DontDestroyOnLoad(gameObject);
+        }
+        else if (instance != this)
+        {
+            Destroy(gameObject); // 以묐났 ?몄뒪?댁뒪 ?쒓굅
+        }
+    }
+
+    
+    protected virtual void OnApplicationQuit()
+    {
+        applicationIsQuitting = true;
+    }
+
+    protected virtual void OnDestroy()
+    {
+        if (instance == this)
+            applicationIsQuitting = true;
+    }
+}
+ 
+===== ?�일: %~dpnxF ===== 
+using System;
+using System.Security.Cryptography;
+using System.Text;
+
+public class ConvertHash
+{
+    public static string StringToHash(string input)
+    {
+        using var sha = SHA256.Create();
+        byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+        return BitConverter.ToString(bytes).Replace("-", "").ToLower();
+    }
+}
+ 
